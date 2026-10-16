@@ -164,6 +164,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .program-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line-soft); font-weight: 700; }
 .program-head .field-hint { font-weight: 400; margin-left: auto; }
 .blockly-host { flex: 1; min-height: 440px; position: relative; }
+.program-head { flex-wrap: wrap; }
+.program-head .program-tabs { margin-left: 0; }
+.program-head .program-hot-toggle { margin-left: auto; gap: 6px; }
+.program-hot-toggle input { width: 16px; height: 16px; }
 
 /* 実行 */
 .run-panel { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
@@ -207,6 +211,28 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .check-items { display: flex; flex-wrap: wrap; gap: 4px; }
 .check-items button { border: 1px solid var(--line); background: var(--surface-sunk); border-radius: 4px; padding: 2px 6px; font-size: 12px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.dialog-wide { width: min(980px, 100%); }
+
+/* ブロックセットの編集 */
+.blockset-layout { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; }
+.blockset-list { flex: 0 0 220px; display: flex; flex-direction: column; gap: 2px; }
+.blockset-list > button { display: flex; flex-direction: column; align-items: flex-start; gap: 0; padding: 7px 10px; border: 0; border-radius: var(--radius); background: transparent; text-align: left; }
+.blockset-list > button:hover { background: var(--surface-sunk); }
+.blockset-list > button[aria-selected='true'] { background: var(--ink); color: #fff; font-weight: 700; }
+.blockset-meta { font-size: 11px; color: var(--ink-sub); font-weight: 400; }
+.blockset-list > button[aria-selected='true'] .blockset-meta { color: #c9ced4; }
+.blockset-add { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.blockset-add .btn { align-self: flex-start; }
+.blockset-detail { flex: 1 1 480px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.blockset-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.blockset-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.blockset-group { margin: 0; border: 1px solid var(--line-soft); border-radius: 8px; padding: 6px 12px 10px; display: flex; flex-direction: column; gap: 6px; }
+.blockset-group legend { font-size: 12px; font-weight: 700; padding: 0 4px; display: inline-flex; align-items: center; gap: 6px; }
+.blockset-dot { width: 10px; height: 10px; border-radius: 3px; }
+.blockset-block { align-items: flex-start; gap: 8px; font-size: 13px; }
+.blockset-block input { width: 16px; height: 16px; margin-top: 2px; flex: none; }
+.blockset-type { display: block; font-size: 11px; color: var(--ink-faint); }
+.blockset-danger { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
 .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 14px; border-radius: 8px; display: flex; gap: 14px; align-items: center; z-index: 60; box-shadow: 0 8px 24px rgba(27, 31, 36, 0.24); }
 .toast button { border: 0; background: transparent; color: #c7c2ff; text-decoration: underline; padding: 0; }
 .notice { margin: 16px 20px 0; padding: 14px 16px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }

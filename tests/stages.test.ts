@@ -15,9 +15,18 @@ describe('既定ステージ（default-stages.json）', () => {
 
   it('旧エディタで完成している模範解答は、全マップでクリアになる', () => {
     // 旧エディタの実行結果と同じく、これらは保存済みプログラムでクリアできる
-    const expectedClear = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 22, 23, 24, 26, 27, 28, 29, 31, 32, 33, 38];
+    // （25 は HOT が行動プログラムで上下に動くことを前提にした模範解答）
+    const expectedClear = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 31, 32, 33, 38];
     const cleared = stages.filter((s) => checkProgramOnAllMaps(s).every((r) => r.status === 'success')).map((s) => s.no);
     expect(cleared).toEqual(expectedClear);
+  });
+
+  it('HOT を動かすステージは、HOT を止めるとクリアできない', () => {
+    const s25 = stages.find((s) => s.no === 25)!;
+    expect(s25.hotBehavior.enabled).toBe(true);
+    expect(checkProgramOnAllMaps(s25)[0]).toMatchObject({ status: 'success', turns: 7 });
+    const still = { ...s25, hotBehavior: { ...s25.hotBehavior, enabled: false } };
+    expect(checkProgramOnAllMaps(still)[0].status).toBe('failed');
   });
 
   it('作りかけのプログラムは理由つきで失敗と判定される', () => {

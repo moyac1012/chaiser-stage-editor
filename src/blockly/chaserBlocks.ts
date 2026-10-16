@@ -6,31 +6,13 @@
 import * as Blockly from 'blockly';
 import { javascriptGenerator, Order } from 'blockly/javascript';
 import * as Ja from 'blockly/msg/ja';
-
-const COLOR_ACTION = '#E07B24';
-const COLOR_ON_TURN = '#3359C4';
-const COLOR_VIEW = '#2E8C82';
-const COLOR_STATE = '#3E8E4E';
+import { COLOR_ACTION, COLOR_HOT, COLOR_HOT_VIEW, COLOR_ON_TURN, COLOR_STATE, COLOR_VIEW } from './catalog';
 
 const DIRS = [['→ 右', 'Right'], ['← 左', 'Left'], ['↑ 上', 'Up'], ['↓ 下', 'Down']];
 const DIRS_UDLR = [['↑ 上', 'Up'], ['↓ 下', 'Down'], ['← 左', 'Left'], ['→ 右', 'Right']];
 const TILE_OPTIONS = [['床 (0)', '0'], ['プレイヤー (1)', '1'], ['ブロック (2)', '2'], ['アイテム (3)', '3']];
+const HOT_TILE_OPTIONS = [['床 (0)', '0'], ['COOL (1)', '1'], ['ブロック (2)', '2'], ['アイテム (3)', '3']];
 const AROUND_INDEX: Record<string, number> = { Up: 1, Down: 7, Left: 3, Right: 5 };
-
-export interface BlockCatalogGroup {
-  name: string;
-  color: string;
-  types: string[];
-}
-
-/** ツールボックスに並べる順番。ブロックセットはこの中から選ぶ。 */
-export const BLOCK_CATALOG: readonly BlockCatalogGroup[] = [
-  { name: '行動', color: COLOR_ACTION, types: ['chaser_on_turn', 'chaser_action_walk', 'chaser_action_put', 'chaser_action_walk_last', 'chaser_action_walk_random', 'chaser_action_look', 'chaser_action_search', 'chaser_action_look_store', 'chaser_action_search_store', 'chaser_turn_end'] },
-  { name: 'まわりを見る', color: COLOR_VIEW, types: ['chaser_get_tile', 'chaser_is_tile', 'chaser_get_around', 'chaser_view_get_around', 'chaser_view_has_tile', 'chaser_view_count_tile', 'chaser_discard_value', 'chaser_tile_value'] },
-  { name: '変数', color: COLOR_STATE, types: ['chaser_state_create', 'chaser_state_set', 'chaser_state_get', 'chaser_state_change', 'chaser_turn_number', 'chaser_last_direction', 'chaser_direction_value'] },
-  { name: '条件', color: '#5B6FA5', types: ['controls_if', 'logic_compare', 'logic_operation', 'logic_boolean', 'logic_negate'] },
-  { name: '数', color: '#5B67A5', types: ['math_number', 'math_arithmetic', 'math_modulo', 'math_number_property', 'math_random_int', 'math_random_float'] },
-];
 
 const BLOCK_JSON = [
   { type: 'chaser_on_turn', message0: '毎ターン', message1: 'やること %1', args1: [{ type: 'input_statement', name: 'DO' }], colour: COLOR_ON_TURN, hat: 'cap' },
@@ -58,10 +40,20 @@ const BLOCK_JSON = [
   { type: 'chaser_view_count_tile', message0: '見た結果 %1 の %2 の数', args0: [{ type: 'input_value', name: 'VIEW' }, { type: 'field_dropdown', name: 'TILE', options: TILE_OPTIONS }], output: 'Number', colour: COLOR_VIEW },
   { type: 'chaser_discard_value', message0: '結果を使わない %1', args0: [{ type: 'input_value', name: 'VALUE' }], previousStatement: null, nextStatement: null, colour: COLOR_VIEW },
   { type: 'chaser_tile_value', message0: 'マスの種類 %1', args0: [{ type: 'field_dropdown', name: 'TILE', options: TILE_OPTIONS }], output: 'Number', colour: COLOR_VIEW },
+  // HOT の行動プログラム用（旧エディタ stage_editor_next_hot_blockly_v3.js と同じ type・フィールド名）
+  { type: 'chaser_hot_on_turn', message0: 'HOTの毎ターン', message1: 'やること %1', args1: [{ type: 'input_statement', name: 'DO' }], colour: COLOR_HOT, hat: 'cap' },
+  { type: 'chaser_hot_turn_end', message0: 'HOTのターンを終える', previousStatement: null, colour: COLOR_HOT },
+  { type: 'chaser_hot_walk', message0: 'HOTが歩く %1', args0: [{ type: 'field_dropdown', name: 'DIR', options: DIRS_UDLR }], previousStatement: null, nextStatement: null, colour: COLOR_HOT },
+  { type: 'chaser_hot_walk_last', message0: 'HOTが前に進んだ向きで歩く（最初は %1）', args0: [{ type: 'field_dropdown', name: 'DIR', options: DIRS_UDLR }], previousStatement: null, nextStatement: null, colour: COLOR_HOT },
+  { type: 'chaser_hot_walk_random', message0: 'HOTがどこかに歩く', previousStatement: null, nextStatement: null, colour: COLOR_HOT },
+  { type: 'chaser_hot_put', message0: 'HOTがブロックを置く %1', args0: [{ type: 'field_dropdown', name: 'DIR', options: DIRS_UDLR }], previousStatement: null, nextStatement: null, colour: COLOR_HOT },
+  { type: 'chaser_hot_is_tile', message0: 'HOTの %1 のマスは %2 ?', args0: [{ type: 'field_dropdown', name: 'DIR', options: DIRS }, { type: 'field_dropdown', name: 'TILE', options: HOT_TILE_OPTIONS }], output: 'Boolean', colour: COLOR_HOT_VIEW },
+  { type: 'chaser_hot_get_tile', message0: 'HOTの %1 のマス', args0: [{ type: 'field_dropdown', name: 'DIR', options: DIRS }], output: 'Number', colour: COLOR_HOT_VIEW },
 ];
 
 /** 生成コード内で使う予約名 */
 export const TURN_ENDED = '__chaserTurnEnded';
+const HOT_TURN_ENDED = '__hotTurnEnded';
 const TURN = '__chaserTurn';
 const LAST = '__chaserLastAction';
 
@@ -115,6 +107,16 @@ function registerGenerators(g: Gen): void {
   f.chaser_view_count_tile = (b) => [`(${value(g, b, 'VIEW', '[]')}).filter(function(v){return v===${tileOf(b)};}).length`, Order.MEMBER];
   f.chaser_discard_value = (b) => `${value(g, b, 'VALUE', 'undefined')};\n`;
   f.chaser_tile_value = (b) => [tileOf(b), Order.ATOMIC];
+  f.chaser_hot_on_turn = (b) =>
+    `function onHotTurn(api){var ${HOT_TURN_ENDED}=false;\n${g.statementToCode(b, 'DO')}if(!${HOT_TURN_ENDED}){throw new Error('「HOTのターンを終える」ブロックまで届きませんでした');}}\n`;
+  f.chaser_hot_turn_end = () => `${HOT_TURN_ENDED}=true;return;\n`;
+  f.chaser_hot_walk = (b) => `api.walk${dirOf(b)}();\n`;
+  f.chaser_hot_put = (b) => `api.put${dirOf(b)}();\n`;
+  f.chaser_hot_walk_last = (b) => `api.walkLast('${dirOf(b, 'Up')}');\n`;
+  f.chaser_hot_walk_random = () =>
+    `(function(){var ds=['Up','Down','Left','Right'];var ix={Up:1,Down:7,Left:3,Right:5};var ok=ds.filter(function(d){return api.around[ix[d]]!==2;});var pool=ok.length?ok:ds;api['walk'+pool[Math.floor(Math.random()*pool.length)]]();})();\n`;
+  f.chaser_hot_is_tile = (b) => [`(api.around[${AROUND_INDEX[dirOf(b)] ?? 5}]===${tileOf(b)})`, Order.ATOMIC];
+  f.chaser_hot_get_tile = (b) => [`api.around[${AROUND_INDEX[dirOf(b)] ?? 5}]`, Order.MEMBER];
   // 旧版で変数ブロックを使って保存したプログラム向け
   f.variables_get = (b) => [varName(g, b), Order.ATOMIC];
   f.variables_set = (b) => `${varName(g, b)}=(${value(g, b, 'VALUE')});\n`;

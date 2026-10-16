@@ -11,6 +11,8 @@ interface HeaderProps {
   onUndo: () => void;
   onRedo: () => void;
   onExport: () => void;
+  onExportReview: () => void;
+  onEditBlockSets: () => void;
   onImport: () => void;
   onLoadDefault: () => void;
   onClearLocal: () => void;
@@ -67,6 +69,9 @@ export function Header(props: HeaderProps) {
         </button>
         {menuOpen && (
           <div class="menu" role="menu" onClick={(e) => e.stopPropagation()}>
+            <button type="button" role="menuitem" onClick={() => pick(props.onEditBlockSets)}>ブロックセットを編集</button>
+            <button type="button" role="menuitem" onClick={() => pick(props.onExportReview)}>レビュー用HTMLを書き出す</button>
+            <hr />
             <button type="button" role="menuitem" onClick={() => pick(props.onImport)}>JSONファイルを読み込む</button>
             <button type="button" role="menuitem" onClick={() => pick(props.onLoadDefault)}>既定のステージ（82件）を読み込む</button>
             <hr />

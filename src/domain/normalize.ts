@@ -5,6 +5,7 @@
 import { MAX_DIFFICULTY, type Phase, type SolutionImage, type Stage, type StageDocument, type StageMap } from './types';
 import { makeBlankRows, padRows } from './mapGrid';
 import { conditionCode, normalizeValidation } from './validation';
+import { competitionText, normalizeHotBehavior, normalizeHotCompetition } from './hot';
 
 type Raw = Record<string, unknown>;
 
@@ -67,8 +68,10 @@ export function normalizeStage(raw: unknown, no: number): Stage {
   const play = asObject(s.play);
   const cond = asString(s.cond, 'goal');
   const validation = normalizeValidation(play.validation, cond);
-  // 旧エディタの「HOT対戦」条件は、HOTを倒す条件として扱われていた
-  if (asObject(s.hotCompetition).enabled) {
+  const hotBehavior = normalizeHotBehavior(s);
+  // 旧エディタと同じく、対戦条件のときは「HOTを倒す」を土台にし、手数制限は使わない
+  const competition = normalizeHotCompetition(s.hotCompetition);
+  if (competition) {
     validation.kind = 'defeatEnemy';
     validation.maxActions = null;
   }
@@ -82,7 +85,7 @@ export function normalizeStage(raw: unknown, no: number): Stage {
     title: asString(s.title) || '無題ステージ',
     blockSet: asString(s.blockSet) || 'BASIC',
     variants: maps.length,
-    cond: asObject(s.hotCompetition).enabled ? cond : conditionCode(validation),
+    cond: competition ? competitionText(competition.turns) : conditionCode(validation),
     goal: asString(s.goal),
     rule: asString(s.rule),
     maps,
@@ -90,7 +93,10 @@ export function normalizeStage(raw: unknown, no: number): Stage {
     difficulty: normalizeDifficulty(s.difficulty),
     includeInExport: s.includeInExport !== false,
     solutions,
+    hotEnabled: hotBehavior.enabled,
+    hotBehavior,
   };
+  if (competition) stage.hotCompetition = competition;
   if (solution) stage.solution = solution;
   return stage;
 }

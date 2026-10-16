@@ -1,6 +1,12 @@
 /** 実行パネル：再生操作・手の流れ・結果・失敗の説明 */
 import type { StageRun } from './useStageRun';
-import { describeAction } from '../engine/game';
+import { describeAction, type GameState } from '../engine/game';
+
+/** その手の行動（HOT が動いた手は HOT の行動も） */
+function describeTurn(s: GameState): string {
+  const cool = describeAction(s.lastAction);
+  return s.hotAction ? `${cool}／HOT：${describeAction(s.hotAction)}` : cool;
+}
 
 const TIMELINE_LIMIT = 80;
 
@@ -33,7 +39,7 @@ export function RunPanel({ run }: { run: StageRun }) {
               key={i + 1}
               class={i + 1 === last && failed ? 'fail' : ''}
               aria-current={index === i + 1 ? 'step' : undefined}
-              title={describeAction(s.lastAction)}
+              title={describeTurn(s)}
               onClick={() => run.seek(i + 1)}
             >
               {i + 1}
@@ -50,7 +56,7 @@ export function RunPanel({ run }: { run: StageRun }) {
       )}
       {current && (
         <span class="field-hint">
-          {index}手目：{describeAction(current.lastAction)}　アイテム {current.items}個
+          {index}手目：{describeTurn(current)}　アイテム {current.hot || current.hotItems ? `COOL ${current.items}個・HOT ${current.hotItems}個` : `${current.items}個`}
         </span>
       )}
 

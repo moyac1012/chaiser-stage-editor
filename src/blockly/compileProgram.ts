@@ -5,7 +5,7 @@
  */
 import * as Blockly from 'blockly';
 import { javascriptGenerator } from 'blockly/javascript';
-import type { BotProgram } from '../engine/runner';
+import type { BotProgram, HotProgram } from '../engine/runner';
 import { ensureChaserBlocks } from './chaserBlocks';
 
 export class ProgramError extends Error {}
@@ -35,4 +35,13 @@ export function compileProgram(xml: string): BotProgram {
   const defs = variables.map((name) => `var ${name}=0;`).join('');
   const factory = new Function(`var __chaserLastAction=null;var __chaserTurn=0;${defs}\n${code}\nreturn {onTurn:onTurn};`);
   return factory() as BotProgram;
+}
+
+/** HOT の行動プログラム */
+export function compileHotProgram(xml: string): HotProgram {
+  const { code, variables } = generateCode(xml);
+  if (!code.includes('function onHotTurn')) throw new ProgramError('「HOTの毎ターン」ブロックがありません');
+  const defs = variables.map((name) => `var ${name}=0;`).join('');
+  const factory = new Function(`${defs}\n${code}\nreturn {onHotTurn:onHotTurn};`);
+  return factory() as HotProgram;
 }

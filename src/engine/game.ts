@@ -1,6 +1,7 @@
 /**
- * チュートリアル盤面のゲームルール（COOL 1 体の 1 手ずつの進行と勝敗判定）。
- * 旧エディタ stage_editor_next_game_rules.js の最終版の挙動に合わせている。
+ * チュートリアル盤面のゲームルール（COOL と HOT の 1 手ずつの進行と勝敗判定）。
+ * 旧エディタ stage_editor_next_game_rules.js・hot_blockly_v3.js・hot_competition.js の
+ * 最終版の挙動に合わせている。1 手は「COOL の行動 → （続いていれば）HOT の行動 → 手の終わりの判定」。
  * 状態は毎手コピーして返すので、途中の手に戻る表示にそのまま使える。
  */
 import type { Direction, Validation } from '../domain/types';
@@ -30,12 +31,20 @@ export interface GameState {
   turn: number;
   items: number;
   enemyDefeated: boolean;
+  /** HOT が取ったアイテムの数（対戦条件で COOL と比べる） */
+  hotItems: number;
+  /** HOT が最後に歩いた向き（「前に進んだ向きで歩く」用） */
+  hotLastDir: Direction | null;
+  /** 対戦条件の終了ターン。null は対戦条件なし */
+  competitionTurns: number | null;
   status: GameStatus;
   message: string;
   /** 失敗の原因になったマス（盤面で強調する） */
   failedAt: Point | null;
   /** その手で行った操作（表示用） */
   lastAction: Action | null;
+  /** その手で HOT が行った操作（HOT が動かない手は null） */
+  hotAction: Action | null;
   validation: Validation;
 }
 
@@ -54,7 +63,7 @@ export function describeAction(a: Action | null): string {
   return a ? `${DIRECTION_NAME[a.dir]}に${ACTION_NAME[a.kind]}` : '行動なし';
 }
 
-export function createGame(rows: readonly string[], validation: Validation): GameState {
+export function createGame(rows: readonly string[], validation: Validation, competitionTurns: number | null = null): GameState {
   const cool = findTile(rows, 'C');
   const tiles = rows.map((r) => [...r].map((ch) => (ch === 'C' || ch === 'H' || ch === 'G' ? '.' : ch)));
   const base: GameState = {
@@ -65,10 +74,14 @@ export function createGame(rows: readonly string[], validation: Validation): Gam
     turn: 0,
     items: 0,
     enemyDefeated: false,
+    hotItems: 0,
+    hotLastDir: null,
+    competitionTurns,
     status: 'running',
     message: '',
     failedAt: null,
     lastAction: null,
+    hotAction: null,
     validation,
   };
   if (!cool) return { ...base, status: 'failed', message: 'COOL（C）が盤面にありません' };
@@ -98,6 +111,18 @@ export function tileCode(s: GameState, x: number, y: number): number {
 export function around(s: GameState): number[] {
   const out: number[] = [];
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) out.push(tileCode(s, s.cool.x + dx, s.cool.y + dy));
+  return out;
+}
+
+/** HOT から見た 3×3。COOL が 1（キャラクター）に見える */
+export function hotAround(s: GameState): number[] {
+  const out: number[] = [];
+  if (!s.hot) return out;
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      out.push(dx === 0 && dy === 0 ? TILE_FLOOR : tileCode(s, s.hot.x + dx, s.hot.y + dy));
+    }
+  }
   return out;
 }
 
@@ -160,6 +185,7 @@ export function applyAction(prev: GameState, action: Action | null): GameState {
   let s = cloneState(prev);
   s.turn += 1;
   s.lastAction = action;
+  s.hotAction = null;
   s.message = '';
   if (!action || action.kind === 'look' || action.kind === 'search') return judge(s);
 
@@ -192,4 +218,54 @@ export function applyAction(prev: GameState, action: Action | null): GameState {
 
 export function failWithError(s: GameState, message: string): GameState {
   return fail({ ...s, turn: s.turn + 1 }, `${s.turn + 1}手目でプログラムが止まりました：${message}`);
+}
+
+/**
+ * COOL の行動の後に HOT を 1 回動かす（手番は進めない）。
+ * HOT は壁に向かって歩くとその場に止まり、COOL のマスに歩くと COOL がやられる。
+ * ブロックは床にだけ置ける（COOL・アイテムのマスには置けない）。
+ */
+export function applyHotAction(prev: GameState, action: Action | null): GameState {
+  if (prev.status !== 'running' || !prev.hot) return prev;
+  const s = cloneState(prev);
+  const hot = s.hot!;
+  s.hotAction = action;
+  if (!action || action.kind === 'look' || action.kind === 'search') return judge(s);
+
+  const d = DIRECTION_DELTA[action.dir];
+  const target = { x: hot.x + d.x, y: hot.y + d.y };
+
+  if (action.kind === 'walk') {
+    if (isBlock(s, target.x, target.y)) return judge(s);
+    s.hot = target;
+    s.hotLastDir = action.dir;
+    if (s.cool.x === target.x && s.cool.y === target.y) {
+      return fail(s, `${s.turn}手目にHOTにつかまりました（HOTが${DIRECTION_NAME[action.dir]}に歩いてきました）`, target);
+    }
+    if (s.tiles[target.y][target.x] === 'I') {
+      // COOL と同じく、取ると直前にいたマスがブロックになる
+      s.hotItems += 1;
+      s.tiles[target.y][target.x] = '.';
+      s.tiles[hot.y][hot.x] = '#';
+    }
+    return judge(s);
+  }
+
+  // put
+  const onCool = s.cool.x === target.x && s.cool.y === target.y;
+  if (!onCool && inside(s, target.x, target.y) && s.tiles[target.y][target.x] === '.') s.tiles[target.y][target.x] = '#';
+  return judge(s);
+}
+
+export function failHotWithError(s: GameState, message: string): GameState {
+  return fail(s, `${s.turn}手目でHOTのプログラムが止まりました：${message}`);
+}
+
+/** 1 手（COOL と HOT の行動）が終わったときの判定。いまは対戦条件だけ */
+export function endTurn(s: GameState): GameState {
+  if (s.status !== 'running' || s.competitionTurns === null || s.turn < s.competitionTurns) return s;
+  const score = `（COOL ${s.items}個 / HOT ${s.hotItems}個）`;
+  return s.items > s.hotItems
+    ? succeed(s, `${s.competitionTurns}ターン終了時にアイテム数でHOTを上回りました${score}`)
+    : fail(s, `${s.competitionTurns}ターン終了時のアイテム数がHOT以下でした${score}`);
 }

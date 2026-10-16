@@ -2,6 +2,8 @@
 import { MAX_DIFFICULTY, type Phase, type Stage, type Validation, type ValidationKind } from '../domain/types';
 import { CONDITION_OPTIONS, conditionCode, describeValidation, needsItemCount, needsTurnCount } from '../domain/validation';
 import type { MapRunResult } from '../checks/stageChecks';
+import { competitionText, competitionTurns, DEFAULT_COMPETITION_TURNS } from '../domain/hot';
+import { findTile } from '../domain/mapGrid';
 
 type Updater = (s: Stage) => Stage;
 
@@ -16,11 +18,26 @@ interface InspectorProps {
   onAddImages: (files: File[]) => void;
   onRemoveImage: (index: number) => void;
   onDelete: () => void;
+  onOpenHotProgram: () => void;
+  onEditBlockSets: () => void;
 }
+
+const COMPETITION = 'hotCompetition';
 
 function withValidation(s: Stage, patch: Partial<Validation>): Stage {
   const validation = { ...s.play.validation, ...patch };
-  return { ...s, cond: conditionCode(validation), play: { ...s.play, validation } };
+  const { hotCompetition: _, ...rest } = s;
+  return { ...rest, cond: conditionCode(validation), play: { ...s.play, validation } };
+}
+
+/** 対戦条件にする。土台は「HOTを倒す」（旧エディタと同じ） */
+function withCompetition(s: Stage, turns: number): Stage {
+  const validation: Validation = { ...s.play.validation, kind: 'defeatEnemy', maxActions: null };
+  return { ...s, hotCompetition: { ...s.hotCompetition, enabled: true, turns }, cond: competitionText(turns), play: { ...s.play, validation } };
+}
+
+function withHotEnabled(s: Stage, enabled: boolean): Stage {
+  return { ...s, hotEnabled: enabled, hotBehavior: { ...s.hotBehavior, enabled } };
 }
 
 function toPositiveInt(value: string, fallback: number): number {
@@ -31,8 +48,9 @@ function toPositiveInt(value: string, fallback: number): number {
 export function Inspector(props: InspectorProps) {
   const { stage: s, onUpdate } = props;
   const v = s.play.validation;
-  const hot = s.hotBehavior as { enabled?: boolean } | undefined;
-  const competition = (s.hotCompetition as { enabled?: boolean } | undefined)?.enabled;
+  const hotOn = s.hotBehavior.enabled;
+  const competition = s.hotCompetition?.enabled ? s.hotCompetition : null;
+  const mapsWithoutHot = s.maps.filter((m) => !findTile(m.rows, 'H')).map((m) => m.label);
   const solved = props.mapResults.every((r) => r.status === 'success');
   const firstBad = props.mapResults.find((r) => r.status !== 'success');
 
@@ -56,7 +74,10 @@ export function Inspector(props: InspectorProps) {
           </select>
         </div>
         <div class="field">
-          <label class="field-label" for="f-set">ブロックセット</label>
+          <div class="inline" style={{ justifyContent: 'space-between' }}>
+            <label class="field-label" for="f-set">ブロックセット</label>
+            <button type="button" class="btn-text" style={{ fontSize: '12px', padding: 0 }} onClick={props.onEditBlockSets}>編集</button>
+          </div>
           <select id="f-set" class="select" value={s.blockSet} onChange={(e) => { const blockSet = e.currentTarget.value; onUpdate((x) => ({ ...x, blockSet }), null); }}>
             {!props.blockSetNames.includes(s.blockSet) && <option value={s.blockSet}>{s.blockSet}（定義なし）</option>}
             {props.blockSetNames.map((n) => (
@@ -89,15 +110,31 @@ export function Inspector(props: InspectorProps) {
 
       <div class="field">
         <label class="field-label" for="f-cond">クリア条件</label>
+        <select
+          id="f-cond"
+          class="select"
+          value={competition ? COMPETITION : v.kind}
+          onChange={(e) => {
+            const value = e.currentTarget.value;
+            if (value === COMPETITION) onUpdate((x) => withCompetition(x, competitionTurns(x.hotCompetition?.turns)), null);
+            else onUpdate((x) => withValidation(x, { kind: value as ValidationKind }), null);
+          }}
+        >
+          {CONDITION_OPTIONS.map((o) => (
+            <option value={o.kind} key={o.kind}>{o.label}</option>
+          ))}
+          <option value={COMPETITION}>HOTを倒す、または N ターン後にアイテム数で上回る</option>
+        </select>
         {competition ? (
-          <span class="field-hint">旧エディタの「HOTを倒す、または Nターン後にアイテム数で上回る」条件です。この版ではHOTを倒す条件として確認します。</span>
+          <div class="inline" style={{ flexWrap: 'wrap' }}>
+            <label class="inline field-hint">
+              N =
+              <input type="number" min={1} class="input" style={{ width: '80px' }} value={competition.turns} onInput={(e) => { const turns = toPositiveInt(e.currentTarget.value, DEFAULT_COMPETITION_TURNS); onUpdate((x) => withCompetition(x, turns), 'competitionTurns'); }} />
+              ターン
+            </label>
+            <span class="field-hint">N ターン目の COOL と HOT の行動が終わってから、取ったアイテムの数を比べます。同じ数か HOT が多ければ失敗です。</span>
+          </div>
         ) : (
-          <select id="f-cond" class="select" value={v.kind} onChange={(e) => { const kind = e.currentTarget.value as ValidationKind; onUpdate((x) => withValidation(x, { kind }), null); }}>
-            {CONDITION_OPTIONS.map((o) => (
-              <option value={o.kind} key={o.kind}>{o.label}</option>
-            ))}
-          </select>
-        )}
         <div class="inline" style={{ flexWrap: 'wrap' }}>
           {needsItemCount(v.kind) && (
             <label class="inline field-hint">
@@ -124,7 +161,8 @@ export function Inspector(props: InspectorProps) {
             <input type="number" min={0} class="input" style={{ width: '90px' }} placeholder="なし" value={v.maxActions ?? ''} onInput={(e) => { const n = Number.parseInt(e.currentTarget.value, 10); const maxActions = Number.isFinite(n) && n > 0 ? n : null; onUpdate((x) => withValidation(x, { maxActions }), 'maxActions'); }} />
           </label>
         </div>
-        <span class="field-hint">{describeValidation(v)}</span>
+        )}
+        <span class="field-hint">{competition ? competitionText(competition.turns) : describeValidation(v)}</span>
         <span class="field-hint" style={{ color: solved ? 'var(--ok-ink)' : 'var(--ng-ink)' }}>
           {solved
             ? `全${props.mapResults.length}マップを模範解答でクリアできます（${props.mapResults.map((r) => `${r.label} ${r.turns}手`).join('・')}）`
@@ -143,11 +181,25 @@ export function Inspector(props: InspectorProps) {
 
       <div class="inspector-section">
         <span class="field-label">HOTの動き</span>
+        <label class="check">
+          <input type="checkbox" checked={hotOn} onChange={(e) => { const enabled = e.currentTarget.checked; onUpdate((x) => withHotEnabled(x, enabled), null); }} />
+          HOTを行動プログラムで動かす
+        </label>
         <span class="field-hint">
-          {hot?.enabled
-            ? 'このステージにはHOTの行動プログラムがあります。この版ではHOTを動かさずに確認します（データはそのまま残ります）。'
-            : 'HOTは動きません。'}
+          {hotOn
+            ? 'COOLが1手動くたびに、ゲームが続いていればHOTも1回動きます。プログラムは中央の「HOTの動き」で編集します。'
+            : 'HOTはその場から動きません（壁と同じように道をふさぎます）。'}
         </span>
+        {hotOn && mapsWithoutHot.length > 0 && (
+          <span class="field-hint" style={{ color: 'var(--warn-ink)' }}>
+            {mapsWithoutHot.join('・')}にはHOT（H）がないので、そのマップではHOTは動きません。
+          </span>
+        )}
+        {(hotOn || competition) && (
+          <button type="button" class="btn-text" style={{ alignSelf: 'flex-start', fontSize: '13px', padding: '2px 0' }} onClick={props.onOpenHotProgram}>
+            HOTの行動プログラムを開く
+          </button>
+        )}
       </div>
 
       <div class="inspector-section">

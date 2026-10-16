@@ -38,6 +38,20 @@ export interface SolutionImage {
   [key: string]: unknown;
 }
 
+/** HOT の行動プログラム。enabled のときだけ実行確認で HOT を動かす */
+export interface HotBehavior {
+  enabled: boolean;
+  savedBlocklyXml: string;
+  [key: string]: unknown;
+}
+
+/** 旧エディタの「HOTを倒す、または N ターン後にアイテム数で上回る」条件 */
+export interface HotCompetition {
+  enabled: boolean;
+  turns: number;
+  [key: string]: unknown;
+}
+
 export interface Stage {
   no: number;
   id: string;
@@ -57,6 +71,10 @@ export interface Stage {
   difficulty: number;
   includeInExport: boolean;
   solutions: SolutionImage[];
+  /** 旧エディタは hotBehavior.enabled と同じ値をここにも書く */
+  hotEnabled: boolean;
+  hotBehavior: HotBehavior;
+  hotCompetition?: HotCompetition;
   [key: string]: unknown;
 }
 

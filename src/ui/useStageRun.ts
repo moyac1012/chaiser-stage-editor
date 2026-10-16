@@ -4,7 +4,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Stage } from '../domain/types';
-import { runStageMap } from '../checks/stageChecks';
+import { runInputsKey, runStageMap } from '../checks/stageChecks';
 import type { GameState } from '../engine/game';
 
 export const PLAY_INTERVAL_MS = 350;
@@ -22,12 +22,11 @@ export interface StageRun {
 }
 
 export function useStageRun(stage: Stage | null, mapIndex: number): StageRun | null {
-  const map = stage?.maps[mapIndex];
   const states = useMemo(
     () => (stage ? runStageMap(stage, mapIndex) : []),
-    // プログラム・盤面・クリア条件のどれかが変わったときだけ動かし直す
+    // プログラム・盤面・クリア条件・HOT のどれかが変わったときだけ動かし直す
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stage?.play.savedBlocklyXml, map?.rows.join('\n'), JSON.stringify(stage?.play.validation)],
+    [runInputsKey(stage, mapIndex)],
   );
   const [index, setIndex] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);

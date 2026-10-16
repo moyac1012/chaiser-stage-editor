@@ -1,12 +1,12 @@
 /** 画面上の Blockly ワークスペースの作成・読み込み・保存 */
 import * as Blockly from 'blockly';
-import { EMPTY_PROGRAM_XML, ensureChaserBlocks } from './chaserBlocks';
-import { buildToolbox, CREATE_VARIABLE_CALLBACK } from './toolbox';
+import { ensureChaserBlocks } from './chaserBlocks';
+import { CREATE_VARIABLE_CALLBACK, type Toolbox } from './toolbox';
 
-export function mountWorkspace(host: HTMLElement, allowedTypes: readonly string[]): Blockly.WorkspaceSvg {
+export function mountWorkspace(host: HTMLElement, toolbox: Toolbox): Blockly.WorkspaceSvg {
   ensureChaserBlocks();
   const ws = Blockly.inject(host, {
-    toolbox: buildToolbox(allowedTypes),
+    toolbox,
     media: `${import.meta.env.BASE_URL}blockly-media/`,
     trashcan: true,
     sounds: false,
@@ -18,15 +18,15 @@ export function mountWorkspace(host: HTMLElement, allowedTypes: readonly string[
   return ws;
 }
 
-/** XML を読み込む。読めない XML のときは false を返し、空のプログラムにする */
-export function loadProgram(ws: Blockly.WorkspaceSvg, xml: string): boolean {
+/** XML を読み込む。読めない XML のときは false を返し、emptyXml（空のプログラム）にする */
+export function loadProgram(ws: Blockly.WorkspaceSvg, xml: string, emptyXml: string): boolean {
   ws.clear();
   try {
-    Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xml.trim() ? xml : EMPTY_PROGRAM_XML), ws);
+    Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xml.trim() ? xml : emptyXml), ws);
     return true;
   } catch {
     ws.clear();
-    Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(EMPTY_PROGRAM_XML), ws);
+    Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(emptyXml), ws);
     return false;
   }
 }
@@ -45,8 +45,8 @@ export function serializeProgram(ws: Blockly.WorkspaceSvg): string {
   return Blockly.Xml.domToText(Blockly.Xml.workspaceToDom(ws));
 }
 
-export function updateToolbox(ws: Blockly.WorkspaceSvg, allowedTypes: readonly string[]): void {
-  ws.updateToolbox(buildToolbox(allowedTypes));
+export function updateToolbox(ws: Blockly.WorkspaceSvg, toolbox: Toolbox): void {
+  ws.updateToolbox(toolbox);
 }
 
 export function resizeWorkspace(ws: Blockly.WorkspaceSvg): void {

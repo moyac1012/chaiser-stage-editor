@@ -9,10 +9,14 @@ import { TILES } from '../domain/tiles';
 import { DocumentFormatError, normalizeDocument } from '../domain/normalize';
 import { makeBlankRows, mapWidth } from '../domain/mapGrid';
 import * as tree from '../domain/stageTree';
-import { checkProgramOnAllMaps, summarizeForExport, type ExportSummary } from '../checks/stageChecks';
+import { checkProgramOnAllMaps, runInputsKey, summarizeForExport, type ExportSummary } from '../checks/stageChecks';
+import { buildHotToolbox, buildToolbox } from '../blockly/toolbox';
+import { EMPTY_PROGRAM_XML } from '../blockly/chaserBlocks';
+import { EMPTY_HOT_PROGRAM_XML } from '../domain/hot';
 import { editorReducer, hasUnexportedChanges, initialEditorState } from '../store/editorState';
 import * as storage from '../store/persistence';
 import { defaultExportFileName, documentFingerprint, downloadText, fetchDefaultDocument, readFileAsDataUrl, serializeDocument } from '../io/files';
+import { buildReviewData, REVIEW_FILE_NAME, reviewHtml } from '../io/reviewPage';
 import { Header } from './Header';
 import { StageList } from './StageList';
 import { BoardPanel } from './BoardPanel';
@@ -20,6 +24,7 @@ import { ProgramPanel } from './ProgramPanel';
 import { RunPanel } from './RunPanel';
 import { Inspector } from './Inspector';
 import { ExportDialog } from './ExportDialog';
+import { BlockSetDialog } from './BlockSetDialog';
 import { useStageRun } from './useStageRun';
 import { pathOf } from './boardView';
 
@@ -49,6 +54,8 @@ export function App() {
   const [tool, setTool] = useState<TileChar>('#');
   const [toast, setToast] = useState<Toast | null>(null);
   const [exportSummary, setExportSummary] = useState<ExportSummary | null>(null);
+  const [programTab, setProgramTab] = useState<'cool' | 'hot'>('cool');
+  const [blockSetsOpen, setBlockSetsOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const doc = state.history.present;
@@ -120,7 +127,7 @@ export function App() {
   const mapResults = useMemo(
     () => (stage ? checkProgramOnAllMaps(stage) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stage?.play.savedBlocklyXml, stage?.maps, JSON.stringify(stage?.play.validation)],
+    [runInputsKey(stage)],
   );
 
   // ---- 操作 ----
@@ -166,6 +173,13 @@ export function App() {
     setToast({ text: `${fileName} を書き出しました`, undoable: false });
   }
 
+  function exportReview() {
+    const data = buildReviewData(doc);
+    const count = data.phases.reduce((n, p) => n + p.stages.length, 0);
+    downloadText(reviewHtml(data, new Date()), REVIEW_FILE_NAME, 'text/html');
+    setToast({ text: `${REVIEW_FILE_NAME} を書き出しました（公開の対象 ${count} ステージ）`, undoable: false });
+  }
+
   if (!booted) return <div class="boot">読み込んでいます…</div>;
 
   const allowedTypes = stage ? doc.blockSets[stage.blockSet] ?? doc.blockSets.BASIC ?? [] : [];
@@ -187,6 +201,8 @@ export function App() {
         onUndo={() => dispatch({ type: 'undo' })}
         onRedo={() => dispatch({ type: 'redo' })}
         onExport={openExport}
+        onExportReview={exportReview}
+        onEditBlockSets={() => setBlockSetsOpen(true)}
         onImport={() => fileInput.current?.click()}
         onLoadDefault={async () => {
           if (!confirm('いまのデータを既定のステージに置き換えます。書き出していない変更は失われます。よろしいですか？')) return;
@@ -283,13 +299,49 @@ export function App() {
                 />
                 <RunPanel run={run} />
                 </div>
-                <ProgramPanel
-                  stageKey={`${ref.phaseId}:${ref.index}:${stage.id}`}
-                  xml={stage.play.savedBlocklyXml}
-                  blockSet={stage.blockSet}
-                  allowedTypes={allowedTypes}
-                  onChange={(xml) => updateStage((s) => ({ ...s, play: { ...s.play, savedBlocklyXml: xml } }), null)}
-                />
+                {programTab === 'cool' ? (
+                  <ProgramPanel
+                    stageKey={`${ref.phaseId}:${ref.index}:${stage.id}:cool`}
+                    xml={stage.play.savedBlocklyXml}
+                    emptyXml={EMPTY_PROGRAM_XML}
+                    toolbox={buildToolbox(allowedTypes)}
+                    toolboxKey={allowedTypes.join(',')}
+                    label="模範解答プログラム"
+                    head={
+                      <>
+                        <ProgramTabs tab={programTab} hotEnabled={stage.hotBehavior.enabled} onTab={setProgramTab} />
+                        <span class="field-hint">使えるブロック：{stage.blockSet}</span>
+                      </>
+                    }
+                    onChange={(xml) => updateStage((s) => ({ ...s, play: { ...s.play, savedBlocklyXml: xml } }), null)}
+                  />
+                ) : (
+                  <ProgramPanel
+                    stageKey={`${ref.phaseId}:${ref.index}:${stage.id}:hot`}
+                    xml={stage.hotBehavior.savedBlocklyXml}
+                    emptyXml={EMPTY_HOT_PROGRAM_XML}
+                    toolbox={buildHotToolbox()}
+                    toolboxKey="hot"
+                    label="HOTの行動プログラム"
+                    head={
+                      <>
+                        <ProgramTabs tab={programTab} hotEnabled={stage.hotBehavior.enabled} onTab={setProgramTab} />
+                        <label class="check field-hint program-hot-toggle">
+                          <input
+                            type="checkbox"
+                            checked={stage.hotBehavior.enabled}
+                            onChange={(e) => {
+                              const enabled = e.currentTarget.checked;
+                              updateStage((s) => ({ ...s, hotEnabled: enabled, hotBehavior: { ...s.hotBehavior, enabled } }), null);
+                            }}
+                          />
+                          このプログラムでHOTを動かす
+                        </label>
+                      </>
+                    }
+                    onChange={(xml) => updateStage((s) => ({ ...s, hotBehavior: { ...s.hotBehavior, savedBlocklyXml: xml } }), null)}
+                  />
+                )}
               </div>
             </>
           ) : (
@@ -315,6 +367,8 @@ export function App() {
             }}
             onAddImages={addImages}
             onRemoveImage={(i) => updateStage((s) => ({ ...s, solutions: s.solutions.filter((_, j) => j !== i) }), null)}
+            onOpenHotProgram={() => setProgramTab('hot')}
+            onEditBlockSets={() => setBlockSetsOpen(true)}
             onDelete={() => {
               const title = stage.title;
               const r = tree.deleteStage(doc, ref);
@@ -338,6 +392,17 @@ export function App() {
         />
       )}
 
+      {blockSetsOpen && (
+        <BlockSetDialog
+          doc={doc}
+          initial={stage?.blockSet ?? null}
+          stageBlockSet={stage?.blockSet ?? null}
+          onEdit={(next) => edit(next)}
+          onUseForStage={(blockSet) => updateStage((s) => ({ ...s, blockSet }), null)}
+          onClose={() => setBlockSetsOpen(false)}
+        />
+      )}
+
       {toast && (
         <div class="toast" role="status">
           <span>{toast.text}</span>
@@ -346,6 +411,17 @@ export function App() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function ProgramTabs({ tab, hotEnabled, onTab }: { tab: 'cool' | 'hot'; hotEnabled: boolean; onTab: (t: 'cool' | 'hot') => void }) {
+  return (
+    <div class="segmented program-tabs" role="tablist" aria-label="プログラム">
+      <button type="button" role="tab" aria-selected={tab === 'cool'} onClick={() => onTab('cool')}>模範解答</button>
+      <button type="button" role="tab" aria-selected={tab === 'hot'} onClick={() => onTab('hot')}>
+        HOTの動き{hotEnabled ? '' : '（オフ）'}
+      </button>
     </div>
   );
 }
