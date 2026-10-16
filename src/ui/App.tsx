@@ -272,6 +272,7 @@ export function App() {
           }}
           onAddGroup={() => edit(tree.addPhase(doc).doc)}
           onRenameGroup={(phaseId, name) => edit(tree.renamePhase(doc, phaseId, name), `group-name:${phaseId}`)}
+          onMoveGroup={(phaseId, toIndex) => edit(tree.movePhase(doc, phaseId, toIndex))}
           onDeleteGroup={(phaseId) => edit(tree.deletePhase(doc, phaseId))}
         />
 

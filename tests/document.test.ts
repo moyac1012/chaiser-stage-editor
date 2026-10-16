@@ -84,3 +84,22 @@ describe('グループ', () => {
     expect(deletePhase(withEmpty, phaseId).phases).toHaveLength(2);
   });
 });
+
+import { movePhase } from '../src/domain/stageTree';
+
+describe('グループの並べ替え', () => {
+  it('前に入れる・後ろに入れると、ステージの番号とIDが振り直される', () => {
+    const doc = normalizeDocument(sample);
+    const down = movePhase(doc, 'A', 2);
+    expect(down.phases.map((p) => p.id)).toEqual(['B', 'A']);
+    expect(down.phases.flatMap((p) => p.stages.map((s) => s.id))).toEqual(['step-01-c', 'step-02-a', 'step-03-b']);
+    expect(movePhase(down, 'A', 0).phases.map((p) => p.id)).toEqual(['A', 'B']);
+  });
+
+  it('位置が変わらないときは同じドキュメントを返す', () => {
+    const doc = normalizeDocument(sample);
+    expect(movePhase(doc, 'A', 0)).toBe(doc);
+    expect(movePhase(doc, 'A', 1)).toBe(doc);
+    expect(movePhase(doc, 'Z', 0)).toBe(doc);
+  });
+});

@@ -170,6 +170,20 @@ export function addPhase(doc: StageDocument): { doc: StageDocument; phaseId: str
   return { doc: { ...doc, phases: [...doc.phases, phase] }, phaseId: id };
 }
 
+/**
+ * グループを別の位置へ移す。toIndex は移す前の並びでの挿入位置（その位置のグループの前に入る）。
+ * ステージの番号と ID は新しい並びで振り直す。
+ */
+export function movePhase(doc: StageDocument, phaseId: string, toIndex: number): StageDocument {
+  const from = phaseIndex(doc, phaseId);
+  if (from < 0) return doc;
+  const at = Math.max(0, Math.min(toIndex > from ? toIndex - 1 : toIndex, doc.phases.length - 1));
+  if (at === from) return doc;
+  const phases = doc.phases.filter((_, i) => i !== from);
+  phases.splice(at, 0, doc.phases[from]);
+  return renumber({ ...doc, phases });
+}
+
 export function renamePhase(doc: StageDocument, phaseId: string, name: string): StageDocument {
   return { ...doc, phases: doc.phases.map((p) => (p.id === phaseId ? { ...p, name } : p)) };
 }

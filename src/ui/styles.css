@@ -98,6 +98,12 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .group-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
 .group-meta { font-size: 12px; color: var(--ink-sub); white-space: nowrap; }
 .group-body { display: flex; flex-direction: column; gap: 1px; padding: 2px 0 6px 20px; }
+.group { position: relative; }
+.group.dragging { opacity: 0.45; }
+.group-head[draggable='true'] { cursor: grab; }
+.group.group-drop-before::before, .group.group-drop-after::after { content: ''; position: absolute; left: 0; right: 0; height: 3px; border-radius: 2px; background: var(--focus); }
+.group.group-drop-before::before { top: -2px; }
+.group.group-drop-after::after { bottom: -2px; }
 .group-body.drop-target { background: var(--focus-tint); border-radius: var(--radius); }
 .stage-row { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 4px 0 8px; border-radius: var(--radius); font-size: 13px; border: 0; background: transparent; width: 100%; text-align: left; position: relative; }
 .stage-row:hover { background: #e4e7e2; }

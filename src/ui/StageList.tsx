@@ -1,4 +1,4 @@
-/** 左のステージ一覧：検索・グループの開閉・ドラッグで並べ替え・行ごとの操作 */
+/** 左のステージ一覧：検索・グループの開閉・ドラッグで並べ替え（ステージ・グループ）・行ごとの操作 */
 import { useEffect, useState } from 'preact/hooks';
 import type { Phase, Stage, StageRef } from '../domain/types';
 
@@ -12,6 +12,8 @@ interface StageListProps {
   onDelete: (ref: StageRef) => void;
   onAddGroup: () => void;
   onRenameGroup: (phaseId: string, name: string) => void;
+  /** toIndex は移す前の並びでの挿入位置 */
+  onMoveGroup: (phaseId: string, toIndex: number) => void;
   onDeleteGroup: (phaseId: string) => void;
 }
 
@@ -34,6 +36,9 @@ export function StageList(props: StageListProps) {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [dragging, setDragging] = useState<StageRef | null>(null);
   const [dropAt, setDropAt] = useState<StageRef | null>(null);
+  const [draggingGroup, setDraggingGroup] = useState<string | null>(null);
+  /** グループを落とす位置（この番号のグループの前。末尾は phases.length） */
+  const [groupDropAt, setGroupDropAt] = useState<number | null>(null);
 
   // 選んだステージのグループは開いておく
   useEffect(() => {
@@ -66,6 +71,19 @@ export function StageList(props: StageListProps) {
     setDropAt(null);
   }
 
+  function dropGroup() {
+    if (draggingGroup !== null && groupDropAt !== null) props.onMoveGroup(draggingGroup, groupDropAt);
+    setDraggingGroup(null);
+    setGroupDropAt(null);
+  }
+
+  /** 落とす位置の線を出すか（動かしても並びが変わらない位置には出さない） */
+  function groupLine(index: number): boolean {
+    if (draggingGroup === null || groupDropAt !== index) return false;
+    const from = phases.findIndex((p) => p.id === draggingGroup);
+    return index !== from && index !== from + 1;
+  }
+
   const searching = query.trim().length > 0;
 
   return (
@@ -73,14 +91,43 @@ export function StageList(props: StageListProps) {
       <label class="field-label" for="stage-search">ステージを探す</label>
       <input id="stage-search" type="search" class="input" placeholder="タイトル・番号・ブロックセット" value={query} onInput={(e) => setQuery(e.currentTarget.value)} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px' }}>
-        {phases.map((p) => {
+        {phases.map((p, pi) => {
           const items = p.stages.map((s, index) => ({ s, index })).filter((x) => matches(x.s, query));
           if (searching && !items.length) return null;
           const isOpen = searching || open.has(p.id);
           const off = p.stages.filter((s) => !s.includeInExport).length;
           return (
-            <div key={p.id}>
-              <div class="group-head">
+            <div
+              key={p.id}
+              class={['group', draggingGroup === p.id && 'dragging', groupLine(pi) && 'group-drop-before', pi === phases.length - 1 && groupLine(phases.length) && 'group-drop-after'].filter(Boolean).join(' ')}
+              onDragOver={(e) => {
+                if (draggingGroup === null) return;
+                e.preventDefault();
+                // グループの上半分なら前、下半分なら後ろに入れる
+                const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setGroupDropAt(e.clientY < box.top + box.height / 2 ? pi : pi + 1);
+              }}
+              onDrop={(e) => {
+                if (draggingGroup === null) return;
+                e.preventDefault();
+                dropGroup();
+              }}
+            >
+              <div
+                class="group-head"
+                draggable={!searching && renaming !== p.id}
+                title={searching ? undefined : 'ドラッグしてグループを並べ替え'}
+                onDragStart={(e) => {
+                  if (dragging) return;
+                  setDraggingGroup(p.id);
+                  e.dataTransfer?.setData('text/plain', p.id);
+                  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+                }}
+                onDragEnd={() => {
+                  setDraggingGroup(null);
+                  setGroupDropAt(null);
+                }}
+              >
                 <button type="button" class="group-toggle" aria-expanded={isOpen} onClick={() => toggle(p.id)}>
                   <span class="group-chev" aria-hidden="true">{isOpen ? '▼' : '▶'}</span>
                   <span class="group-id">{p.id}</span>
@@ -119,6 +166,8 @@ export function StageList(props: StageListProps) {
                     <div class="menu" role="menu" onClick={(e) => e.stopPropagation()}>
                       <button type="button" role="menuitem" onClick={() => { setRenaming(p.id); setGroupMenu(null); }}>グループ名を変える</button>
                       <button type="button" role="menuitem" onClick={() => { props.onAddStage(p.id); setGroupMenu(null); }}>ステージを追加</button>
+                      <button type="button" role="menuitem" disabled={pi === 0} onClick={() => { props.onMoveGroup(p.id, pi - 1); setGroupMenu(null); }}>グループを1つ上へ</button>
+                      <button type="button" role="menuitem" disabled={pi === phases.length - 1} onClick={() => { props.onMoveGroup(p.id, pi + 2); setGroupMenu(null); }}>グループを1つ下へ</button>
                       <hr />
                       <button type="button" role="menuitem" class="menu-danger" disabled={p.stages.length > 0} title={p.stages.length ? 'ステージがあるグループは削除できません' : undefined} onClick={() => { props.onDeleteGroup(p.id); setGroupMenu(null); }}>
                         グループを削除{p.stages.length ? '（空のときだけ）' : ''}
@@ -136,6 +185,7 @@ export function StageList(props: StageListProps) {
                     if (e.target === e.currentTarget) setDropAt({ phaseId: p.id, index: p.stages.length });
                   }}
                   onDrop={(e) => {
+                    if (!dragging) return;
                     e.preventDefault();
                     drop(p.id, dropAt?.phaseId === p.id ? dropAt.index : p.stages.length);
                   }}
@@ -163,6 +213,7 @@ export function StageList(props: StageListProps) {
                             setDropAt(ref);
                           }}
                           onDrop={(e) => {
+                            if (!dragging) return;
                             e.preventDefault();
                             e.stopPropagation();
                             drop(p.id, index);
