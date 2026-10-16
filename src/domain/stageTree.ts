@@ -184,6 +184,14 @@ export function movePhase(doc: StageDocument, phaseId: string, toIndex: number):
   return renumber({ ...doc, phases });
 }
 
+/** グループ内のステージをまとめて公開の対象にする／外す */
+export function setPhaseIncludeInExport(doc: StageDocument, phaseId: string, include: boolean): StageDocument {
+  return {
+    ...doc,
+    phases: doc.phases.map((p) => (p.id === phaseId ? { ...p, stages: p.stages.map((s) => (s.includeInExport === include ? s : { ...s, includeInExport: include })) } : p)),
+  };
+}
+
 export function renamePhase(doc: StageDocument, phaseId: string, name: string): StageDocument {
   return { ...doc, phases: doc.phases.map((p) => (p.id === phaseId ? { ...p, name } : p)) };
 }
